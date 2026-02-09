@@ -15,6 +15,20 @@
       "when": 1770645543713,
       "tag": "0001_colossal_the_call",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770653580610,
+      "tag": "0002_illegal_viper",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770660179735,
+      "tag": "0003_groovy_robbie_robertson",
+      "breakpoints": true
     }
   ]
 }
