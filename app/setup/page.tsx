@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { organization, organizationOwner } from "@/db/schema";
+import { organization, organizationOwner, systemAdmin } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import SetupForm from "@/components/custom/setup-form";
 
@@ -16,7 +16,14 @@ export default async function SetupPage() {
     redirect("/login");
   }
 
-  // 2. Fetch organization (if exists)
+  // 2. Check if user is admin → redirect to admin panel
+  const admin = await db.select().from(systemAdmin).where(eq(systemAdmin.userId, session.user.id)).limit(1);
+
+  if (admin.length > 0) {
+    redirect("/admin");
+  }
+
+  // 3. Fetch organization (if exists)
   const result = await db
     .select({
       status: organization.status,
@@ -29,14 +36,14 @@ export default async function SetupPage() {
     .where(eq(organizationOwner.userId, session.user.id))
     .limit(1);
 
-  // 3. No organization yet → allow setup
+  // 4. No organization yet → allow setup
   if (result.length === 0) {
     return <SetupForm />;
   }
 
   const status = result[0].status;
 
-  // 4. Redirect by status
+  // 5. Redirect by status
   if (status === "PENDING") {
     redirect("/pending");
   }

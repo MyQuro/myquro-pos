@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "menu_item_org_item_code_unique" ON "menu_item" USING btree ("organization_id","item_code");

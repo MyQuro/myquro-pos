@@ -29,6 +29,34 @@
       "when": 1770660179735,
       "tag": "0003_groovy_robbie_robertson",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770722268677,
+      "tag": "0004_smiling_anthem",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770730975221,
+      "tag": "0005_black_silver_surfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1770747217344,
+      "tag": "0006_safe_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770748095459,
+      "tag": "0007_daffy_dark_beast",
+      "breakpoints": true
     }
   ]
 }
