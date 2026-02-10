@@ -1,32 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Switch } from "@/components/ui/switch";
 
 import AddCategory from "./AddCategory";
 import AddMenuItem from "./AddMenuItem";
 
+type MenuItem = {
+  id: string;
+  name: string;
+  price: number;
+  isVeg: boolean;
+  isAvailable: boolean;
+  itemCode: string;
+};
+
 type MenuData = {
   categoryId: string;
   categoryName: string;
-  items: {
-    id: string;
-    name: string;
-    price: number;
-    isVeg: boolean;
-    isAvailable: boolean;
-    itemCode: string;
-  }[];
+  items: MenuItem[];
 }[];
 
 export default function MenuManagement() {
   const [menu, setMenu] = useState<MenuData>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  async function loadMenu() {
-    setLoading(true);
+  async function loadMenu(showLoader = false) {
+    if (showLoader) {
+      setInitialLoading(true);
+    }
     setError(null);
+    
     try {
       const res = await fetch("/api/pos/menu/items");
 
@@ -50,11 +56,26 @@ export default function MenuManagement() {
       setError(err instanceof Error ? err.message : "Failed to load menu");
       setMenu([]);
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setInitialLoading(false);
+      }
     }
   }
 
   async function toggleAvailability(itemId: string) {
+    // Optimistically update UI
+    setMenu((prevMenu) =>
+      prevMenu.map((category) => ({
+        ...category,
+        items: category.items.map((item) =>
+          item.id === itemId
+            ? { ...item, isAvailable: !item.isAvailable }
+            : item
+        ),
+      }))
+    );
+
+    // Make API call in background
     try {
       const res = await fetch(`/api/pos/menu/items/${itemId}/availability`, {
         method: "PATCH",
@@ -64,25 +85,51 @@ export default function MenuManagement() {
         throw new Error("Failed to toggle availability");
       }
 
-      await loadMenu();
+      // Silently refresh in background without showing loader
+      startTransition(() => {
+        loadMenu(false);
+      });
     } catch (err) {
       console.error("Error toggling availability:", err);
+      
+      // Revert optimistic update on error
+      setMenu((prevMenu) =>
+        prevMenu.map((category) => ({
+          ...category,
+          items: category.items.map((item) =>
+            item.id === itemId
+              ? { ...item, isAvailable: !item.isAvailable }
+              : item
+          ),
+        }))
+      );
+      
       alert("Failed to update item availability");
     }
   }
 
+  function addItemOptimistically(newItem: MenuItem, categoryId: string) {
+    setMenu((prevMenu) =>
+      prevMenu.map((category) =>
+        category.categoryId === categoryId
+          ? { ...category, items: [...category.items, newItem] }
+          : category
+      )
+    );
+  }
+
   useEffect(() => {
-    loadMenu();
+    loadMenu(true); // Show loader only on initial mount
   }, []);
 
-  if (loading) return <p>Loading menu...</p>;
+  if (initialLoading) return <p>Loading menu...</p>;
 
   if (error) {
     return (
       <div className="space-y-4">
         <p className="text-red-500">Error: {error}</p>
         <button
-          onClick={loadMenu}
+          onClick={() => loadMenu(true)}
           className="px-4 py-2 bg-blue-500 text-white rounded"
         >
           Retry
@@ -95,10 +142,14 @@ export default function MenuManagement() {
     <div className="space-y-6">
       {/* Action buttons */}
       <div className="flex gap-3">
-        <AddCategory onSuccess={loadMenu} />
+        <AddCategory onSuccess={() => loadMenu(false)} />
         <AddMenuItem
-          categories={menu.map((cat) => ({ id: cat.categoryId, name: cat.categoryName }))}
-          onSuccess={loadMenu}
+          categories={menu.map((cat) => ({
+            id: cat.categoryId,
+            name: cat.categoryName,
+          }))}
+          onSuccess={() => loadMenu(false)}
+          onOptimisticAdd={addItemOptimistically}
         />
       </div>
 

@@ -24,12 +24,23 @@ type Category = {
   name: string;
 };
 
+type MenuItem = {
+  id: string;
+  name: string;
+  price: number;
+  isVeg: boolean;
+  isAvailable: boolean;
+  itemCode: string;
+};
+
 export default function AddMenuItem({
   categories,
   onSuccess,
+  onOptimisticAdd,
 }: {
   categories: Category[];
   onSuccess: () => void;
+  onOptimisticAdd?: (item: MenuItem, categoryId: string) => void;
 }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -42,33 +53,65 @@ export default function AddMenuItem({
   async function handleSubmit() {
     if (!name || !price || !categoryId || !itemCode) return;
 
-    setLoading(true);
-    const res = await fetch("/api/pos/menu/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        price: Number(price) * 100,
-        categoryId,
-        isVeg,
-        itemCode,
-      }),
-    });
+    // Create temporary item for optimistic update
+    const tempId = `temp-${Date.now()}`;
+    const newItem: MenuItem = {
+      id: tempId,
+      name,
+      price: Number(price) * 100,
+      isVeg,
+      isAvailable: true,
+      itemCode,
+    };
 
-    if (res.ok) {
-      setName("");
-      setPrice("");
-      setItemCode("");
-      setCategoryId(undefined);
-      setIsVeg(true);
-      setOpen(false);
-      onSuccess();
-    } else {
-      const error = await res.json();
-      alert(error.error || "Failed to add item");
+    // Optimistically add to UI
+    if (onOptimisticAdd) {
+      onOptimisticAdd(newItem, categoryId);
     }
-    
-    setLoading(false);
+
+    // Close dialog immediately
+    setOpen(false);
+
+    // Reset form
+    const formData = { name, price, itemCode, categoryId, isVeg };
+    setName("");
+    setPrice("");
+    setItemCode("");
+    setCategoryId(undefined);
+    setIsVeg(true);
+
+    // Make API call in background
+    setLoading(true);
+    try {
+      const res = await fetch("/api/pos/menu/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          price: Number(formData.price) * 100,
+          categoryId: formData.categoryId,
+          isVeg: formData.isVeg,
+          itemCode: formData.itemCode,
+        }),
+      });
+
+      if (res.ok) {
+        // Refresh menu to get real ID from server
+        onSuccess();
+      } else {
+        const error = await res.json();
+        alert(error.error || "Failed to add item");
+        // Refresh to remove optimistic item
+        onSuccess();
+      }
+    } catch (err) {
+      console.error("Error adding item:", err);
+      alert("Failed to add item");
+      // Refresh to remove optimistic item
+      onSuccess();
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -81,8 +124,6 @@ export default function AddMenuItem({
           <DialogTitle>Add New Menu Item</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 mt-4">
-          
-
           <div className="space-y-2">
             <Label htmlFor="item-name">Item Name</Label>
             <Input
@@ -92,6 +133,7 @@ export default function AddMenuItem({
               onChange={(e) => setName(e.target.value)}
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="item-code">Item Code</Label>
             <Input
