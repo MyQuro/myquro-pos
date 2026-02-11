@@ -121,18 +121,18 @@ export async function fetchOrganizationDetails(organizationId: string) {
     .where(eq(organizationCompliance.organizationId, organizationId))
     .limit(1);
 
-  // 6. Fetch documents (may be empty for now)
+  // 6. Fetch documents with storageKey
   const documents = await db.select({
         id: organizationDocument.id,
         documentType: organizationDocument.documentType,
         fileName: organizationDocument.fileName,
         fileMimeType: organizationDocument.fileMimeType,
         fileSize: organizationDocument.fileSize,
+        storageKey: organizationDocument.storageKey,
         uploadedAt: organizationDocument.uploadedAt,
     })
   .from(organizationDocument)
   .where(eq(organizationDocument.organizationId, organizationId));
-
 
   // 7. Return structured result
   return {
@@ -142,4 +142,3 @@ export async function fetchOrganizationDetails(organizationId: string) {
     documents,
   };
 }
-    
