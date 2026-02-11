@@ -37,6 +37,9 @@ export default async function PosLayout({
           >
             Order Management
           </Link>
+          <Link href="/pos/reports" className="px-3 py-2 rounded hover:bg-gray-100">
+            Reports
+          </Link>
         </nav>
       </aside>
 
