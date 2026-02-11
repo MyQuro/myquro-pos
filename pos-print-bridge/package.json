@@ -1,21 +1,29 @@
 {
-  "name": "pos-print-bridge",
+  "name": "myquro-print-agent",
   "version": "1.0.0",
-  "description": "",
-  "main": "formatter.js",
+  "description": "POS Print Bridge for MyQuro - Local print agent for thermal printers",
+  "author": "MyQuro",
+  "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "electron .",
+    "build": "electron-builder"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "body-parser": "^2.2.2",
-    "cors": "^2.8.6",
-    "escpos": "^3.0.0-alpha.6",
-    "escpos-usb": "^3.0.0-alpha.4",
-    "express": "^5.2.1"
+  "build": {
+    "appId": "com.myquro.printagent",
+    "productName": "MyQuro Print Agent",
+    "files": [
+      "**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business"
+    }
   }
 }
