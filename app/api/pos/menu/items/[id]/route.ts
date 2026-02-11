@@ -6,8 +6,9 @@ import { eq, and } from "drizzle-orm";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   const ctx = await requirePosContext();
   if ("error" in ctx) return ctx.error;
 
@@ -28,8 +29,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   const ctx = await requirePosContext();
   if ("error" in ctx) return ctx.error;
 
