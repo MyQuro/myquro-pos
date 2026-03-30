@@ -17,6 +17,7 @@ export async function GET() {
       price: menuItem.price,
       isVeg: menuItem.isVeg,
       itemCode: menuItem.itemCode,
+      gstRate: menuCategory.gstRate,
     })
     .from(menuCategory)
     .innerJoin(
@@ -39,6 +40,7 @@ export async function GET() {
       itemCode: string;
       price: number;
       isVeg: boolean;
+      gstRate: number;
     }[];
   }[] = [];
 
@@ -61,6 +63,7 @@ export async function GET() {
       itemCode: row.itemCode,
       price: row.price,
       isVeg: row.isVeg,
+      gstRate: row.gstRate,
     });
   }
 

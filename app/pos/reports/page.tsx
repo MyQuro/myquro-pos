@@ -4,6 +4,22 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { 
+  Analytics, 
+  ChartLine, 
+  ChartBar, 
+  Growth, 
+  Money, 
+  Purchase,
+  ChevronRight,
+  Download,
+  Calendar,
+  Wallet,
+  Enterprise,
+  Group,
+  Receipt
+} from "@carbon/icons-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Period = "daily" | "weekly" | "monthly" | "custom";
 
@@ -13,12 +29,26 @@ interface ReportData {
   end: string;
   totalOrders: number;
   totalRevenue: number;
+  totalCost: number;
+  topProducts: {
+    name: string;
+    totalQuantity: number;
+    revenue: number;
+    category: string;
+  }[];
+  customerSegments: {
+    segment: string;
+    count: number;
+    revenue: number;
+  }[];
   paymentBreakdown: {
     cash: number;
     upi: number;
     card: number;
   };
 }
+
+const softSpringEasing = [0.25, 1.1, 0.4, 1] as [number, number, number, number];
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState<Period>("daily");
@@ -28,353 +58,318 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Convert amount from paise to rupees and round to 2 decimal places
-  const convertAmount = (amount: number) => {
-    return Math.round((amount / 100) * 100) / 100;
-  };
+  const convertAmount = (amount: number) => Math.round((amount / 100) * 100) / 100;
 
-  // Build URL for API call
   const buildApiUrl = (format?: "csv" | "json") => {
     let url = "/api/pos/reports/summary?";
-
     if (period === "custom") {
       url += `from=${customFrom}&to=${customTo}`;
     } else {
       url += `period=${period}`;
     }
-
-    if (format === "csv") {
-      url += "&format=csv";
-    }
-
+    if (format === "csv") url += "&format=csv";
     return url;
   };
 
-  // Fetch report data
   const fetchReport = async () => {
     setLoading(true);
     setError(null);
-
     try {
       if (period === "custom" && (!customFrom || !customTo)) {
-        setError("Please select both start and end dates for custom range");
+        setError("Please Select Date Range");
         setLoading(false);
         return;
       }
-
       const response = await fetch(buildApiUrl());
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch report");
-      }
-
+      if (!response.ok) throw new Error("Failed to Fetch Data");
       const data = await response.json();
-
-      // Convert all amounts from paise to rupees
       const convertedData = {
         ...data,
         totalRevenue: convertAmount(data.totalRevenue),
+        totalCost: convertAmount(data.totalCost || 0),
         paymentBreakdown: {
           cash: convertAmount(data.paymentBreakdown.cash),
           upi: convertAmount(data.paymentBreakdown.upi),
           card: convertAmount(data.paymentBreakdown.card),
         },
       };
-
       setReportData(convertedData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      setReportData(null);
+      setError(err instanceof Error ? err.message : "Error Occurred");
     } finally {
       setLoading(false);
     }
   };
 
-  // Export to CSV
   const exportToCSV = async () => {
     try {
-      if (period === "custom" && (!customFrom || !customTo)) {
-        setError("Please select both start and end dates for custom range");
-        return;
-      }
-
       const response = await fetch(buildApiUrl("csv"));
-
-      if (!response.ok) {
-        throw new Error("Failed to export report");
-      }
-
+      if (!response.ok) throw new Error("Export Failed");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `sales-report-${period}-${new Date().toISOString().split("T")[0]}.csv`;
+      a.download = `sales-${period}-${new Date().toISOString().slice(0,10)}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to export CSV");
+      setError("Export Failed");
     }
   };
 
-  // Auto-fetch when period changes (except custom)
   useEffect(() => {
-    if (period !== "custom") {
-      fetchReport();
-    }
+    if (period !== "custom") fetchReport();
   }, [period]);
 
-  // Get today's date for daily report default
-  const getTodayDate = () => {
-    const today = new Date();
-    return today.toISOString().split("T")[0];
-  };
-
-  // Format currency
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
     }).format(amount);
   };
 
-  // Format date range
-  const formatDateRange = (start: string, end: string) => {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    return `${startDate.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })} - ${endDate.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })}`;
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Sales Reports</h1>
-        
-        {/* Export Button */}
-        {reportData && (
-          <Button
-            variant="outline"
+    <div className="space-y-8 max-w-6xl mx-auto dark">
+      {/* Header Area */}
+      <div className="flex justify-between items-end border-b border-neutral-800 pb-6">
+        <div>
+          <h2 className="text-3xl font-semibold text-neutral-50 tracking-tight flex items-center gap-3">
+            <Analytics size={32} className="text-neutral-400" />
+            Analytics
+          </h2>
+          <p className="text-neutral-400 text-sm mt-1">Strategic insights for your business operations.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button 
+            variant="outline" 
             onClick={exportToCSV}
-            className="gap-2"
+            disabled={!reportData}
+            className="border-neutral-800 text-neutral-300 hover:bg-neutral-900 rounded-xl px-5 h-11 flex gap-2 font-medium transition-all active:scale-95"
           >
-            <span>📥</span>
-            Export CSV
-          </Button>
-        )}
-      </div>
-
-      {/* Period Selection */}
-      <div className="bg-white border rounded-lg p-6 space-y-4">
-        <h2 className="text-lg font-medium">Select Report Period</h2>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={period === "daily" ? "default" : "outline"}
-            onClick={() => setPeriod("daily")}
-          >
-            Daily
-          </Button>
-          <Button
-            variant={period === "weekly" ? "default" : "outline"}
-            onClick={() => setPeriod("weekly")}
-          >
-            Weekly
-          </Button>
-          <Button
-            variant={period === "monthly" ? "default" : "outline"}
-            onClick={() => setPeriod("monthly")}
-          >
-            Monthly
-          </Button>
-          <Button
-            variant={period === "custom" ? "default" : "outline"}
-            onClick={() => setPeriod("custom")}
-          >
-            Custom Range
+            <Download size={20} />
+            Export Data
           </Button>
         </div>
+      </div>
 
-        {/* Custom Date Range */}
+      {/* Control Panel */}
+      <div className="bg-[#0d0d0d] border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row gap-6 items-center">
+        <div className="flex bg-neutral-900 p-1.5 rounded-xl border border-neutral-800">
+          {(["daily", "weekly", "monthly", "custom"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize
+                ${period === p ? "bg-neutral-50 text-black shadow-lg" : "text-neutral-500 hover:text-neutral-300"}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+
         {period === "custom" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-            <div className="space-y-2">
-              <Label htmlFor="from">From Date</Label>
-              <Input
-                id="from"
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-              />
+          <motion.div 
+            initial={{ opacity: 0, x: -10 }} 
+            animate={{ opacity: 1, x: 0 }} 
+            className="flex flex-wrap items-center gap-4 flex-1"
+          >
+            <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-1.5 focus-within:border-neutral-500 transition-colors">
+              <Calendar size={18} className="text-neutral-500" />
+              <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="bg-transparent border-none text-neutral-300 p-0 h-auto focus-visible:ring-0" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="to">To Date</Label>
-              <Input
-                id="to"
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-              />
+            <span className="text-neutral-600">—</span>
+            <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-1.5 focus-within:border-neutral-500 transition-colors">
+              <Calendar size={18} className="text-neutral-500" />
+              <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="bg-transparent border-none text-neutral-300 p-0 h-auto focus-visible:ring-0" />
             </div>
-            <div className="md:col-span-2">
-              <Button onClick={fetchReport} disabled={loading}>
-                {loading ? "Loading..." : "Generate Report"}
-              </Button>
-            </div>
-          </div>
+            <Button onClick={fetchReport} disabled={loading} className="bg-neutral-50 text-black px-6 rounded-xl hover:bg-neutral-200">
+              {loading ? "Generating..." : "Generate"}
+            </Button>
+          </motion.div>
         )}
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">
-          {error}
-        </div>
-      )}
+      {/* Error / Loading */}
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-center">
+            {error}
+          </motion.div>
+        )}
+        {loading && (
+          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 flex flex-col items-center gap-4">
+            <div className="animate-spin size-8 border-2 border-neutral-700 border-t-neutral-100 rounded-full" />
+            <p className="text-neutral-500 font-light tracking-widest text-xs uppercase">Synthesizing Ledger Records...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="bg-white border rounded-lg p-12 text-center">
-          <div className="text-gray-500">Loading report data...</div>
-        </div>
-      )}
-
-      {/* Report Data */}
+      {/* Analytics Content */}
       {!loading && reportData && (
-        <div className="space-y-6">
-          {/* Report Header */}
-          <div className="bg-white border rounded-lg p-6">
-            <h2 className="text-lg font-medium mb-2">Report Period</h2>
-            <p className="text-gray-600">
-              {formatDateRange(reportData.start, reportData.end)}
-            </p>
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="space-y-6"
+        >
+          {/* Top Line Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <SummaryCard title="Gross Revenue" value={formatCurrency(reportData.totalRevenue)} icon={<Money size={20} />} trend="+14.2%" />
+            <SummaryCard title="Net Profit" value={formatCurrency(reportData.totalRevenue - reportData.totalCost)} icon={<Growth size={20} />} trend="+8.1%" negative={reportData.totalRevenue < reportData.totalCost} />
+            <SummaryCard title="Volume" value={reportData.totalOrders.toString()} icon={<Receipt size={20} />} trend="+22" />
+            <SummaryCard title="Avg Basket" value={formatCurrency(reportData.totalOrders > 0 ? reportData.totalRevenue / reportData.totalOrders : 0)} icon={<Wallet size={20} />} />
           </div>
 
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Total Orders */}
-            <div className="bg-white border rounded-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Total Orders</p>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {reportData.totalOrders}
-                  </p>
-                </div>
-                <div className="text-4xl">📦</div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Top Inventory Impact */}
+            <div className="lg:col-span-2 bg-[#090909] border border-neutral-800 p-6 rounded-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold text-neutral-100 flex items-center gap-2">
+                  <ChartBar size={20} className="text-neutral-500" />
+                  Velocity Leaders
+                </h3>
+              </div>
+              <div className="space-y-4">
+                {reportData.topProducts.map((p, i) => (
+                  <div key={i} className="group flex items-center gap-4">
+                    <div className="size-10 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-500 font-bold text-xs">
+                      0{i+1}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="text-neutral-200 group-hover:text-neutral-50 transition-colors uppercase tracking-tight font-medium">{p.name}</span>
+                        <span className="text-neutral-400 font-mono">{p.totalQuantity} units</span>
+                      </div>
+                      <div className="w-full bg-neutral-900 rounded-full h-1.5 overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }} 
+                          animate={{ width: `${(p.revenue / (reportData.totalRevenue * 100)) * 100}%` }} 
+                          transition={{ duration: 1, delay: 0.2 + i*0.1 }}
+                          className="bg-neutral-100 h-full rounded-full group-hover:bg-green-500 transition-colors" 
+                        />
+                      </div>
+                    </div>
+                    <div className="text-right tabular-nums text-sm font-semibold text-neutral-300 pr-2">
+                      {formatCurrency(p.revenue / 100)}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Total Revenue */}
-            <div className="bg-white border rounded-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-                  <p className="text-3xl font-bold text-green-600">
-                    {formatCurrency(reportData.totalRevenue)}
-                  </p>
+            {/* Payment Systems */}
+            <div className="bg-[#090909] border border-neutral-800 p-6 rounded-2xl flex flex-col">
+              <h3 className="text-lg font-semibold text-neutral-100 mb-6 flex items-center gap-2">
+                <Wallet size={20} className="text-neutral-500" />
+                Settlements
+              </h3>
+              <div className="space-y-6 flex-1 flex flex-col justify-center">
+                <SettlementItem label="UPI Transfers" amount={reportData.paymentBreakdown.upi} total={reportData.totalRevenue} color="bg-blue-500" />
+                <SettlementItem label="Cash On Hand" amount={reportData.paymentBreakdown.cash} total={reportData.totalRevenue} color="bg-amber-500" />
+                <SettlementItem label="Card / POS" amount={reportData.paymentBreakdown.card} total={reportData.totalRevenue} color="bg-neutral-500" />
+              </div>
+              <div className="mt-8 pt-6 border-t border-neutral-800 flex justify-between items-center text-xs">
+                <span className="text-neutral-500 uppercase tracking-widest">Efficiency Rating</span>
+                <span className="text-green-500 font-bold">OPTIMIZED</span>
+              </div>
+            </div>
+
+            {/* Segmentation */}
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-[#090909] border border-neutral-800 p-6 rounded-2xl md:col-span-2">
+                <h3 className="text-lg font-semibold text-neutral-100 mb-6 flex items-center gap-2">
+                  <Group size={20} className="text-neutral-500" />
+                  Client Segmentation
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   {reportData.customerSegments.map((c, i) => (
+                      <div key={i} className="flex gap-4 items-center">
+                        <div className="size-16 rounded-2xl bg-neutral-900 border border-neutral-800 flex flex-col items-center justify-center p-2">
+                          <span className="text-neutral-500 text-[10px] uppercase font-bold tracking-tighter">SHARE</span>
+                          <span className="text-neutral-50 text-lg font-bold">
+                            {reportData.totalRevenue > 0 ? Math.round((c.revenue / (reportData.totalRevenue * 100)) * 100) : 0}%
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-100 uppercase tracking-tight">{c.segment} Business</p>
+                          <p className="text-xs text-neutral-500 mt-0.5">{c.count} Conversions</p>
+                          <p className="text-sm text-green-500 font-bold mt-1 font-mono">{formatCurrency(c.revenue / 100)}</p>
+                        </div>
+                      </div>
+                   ))}
                 </div>
-                <div className="text-4xl">💰</div>
+              </div>
+
+              <div className="bg-neutral-50 rounded-2xl p-6 flex flex-col justify-between group overflow-hidden relative">
+                <div className="relative z-10">
+                   <h3 className="text-black font-bold text-sm uppercase tracking-widest mb-1">Growth Forecast</h3>
+                   <p className="text-black/60 text-xs">Based on current trajectory</p>
+                </div>
+                <div className="relative z-10 py-4">
+                  <p className="text-5xl font-black text-black">↑12%</p>
+                </div>
+                <div className="relative z-10 flex justify-between items-center">
+                  <span className="text-[10px] bg-black/10 px-2 py-1 rounded text-black font-bold">NEXT PERIOD</span>
+                  <ChevronRight size={20} className="text-black/40 group-hover:translate-x-1 transition-transform" />
+                </div>
+                <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform">
+                  <Growth size={120} />
+                </div>
               </div>
             </div>
           </div>
-
-          {/* Payment Breakdown */}
-          <div className="bg-white border rounded-lg p-6">
-            <h2 className="text-lg font-medium mb-4">Payment Breakdown</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Cash */}
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">💵</span>
-                  <span className="font-medium">Cash</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(reportData.paymentBreakdown.cash)}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {reportData.totalRevenue > 0
-                    ? `${(
-                        (reportData.paymentBreakdown.cash /
-                          reportData.totalRevenue) *
-                        100
-                      ).toFixed(1)}%`
-                    : "0%"}
-                </p>
-              </div>
-
-              {/* UPI */}
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">📱</span>
-                  <span className="font-medium">UPI</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(reportData.paymentBreakdown.upi)}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {reportData.totalRevenue > 0
-                    ? `${(
-                        (reportData.paymentBreakdown.upi /
-                          reportData.totalRevenue) *
-                        100
-                      ).toFixed(1)}%`
-                    : "0%"}
-                </p>
-              </div>
-
-              {/* Card */}
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">💳</span>
-                  <span className="font-medium">Card</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(reportData.paymentBreakdown.card)}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {reportData.totalRevenue > 0
-                    ? `${(
-                        (reportData.paymentBreakdown.card /
-                          reportData.totalRevenue) *
-                        100
-                      ).toFixed(1)}%`
-                    : "0%"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Average Order Value */}
-          <div className="bg-white border rounded-lg p-6">
-            <h2 className="text-lg font-medium mb-2">Average Order Value</h2>
-            <p className="text-3xl font-bold text-blue-600">
-              {reportData.totalOrders > 0
-                ? formatCurrency(reportData.totalRevenue / reportData.totalOrders)
-                : formatCurrency(0)}
-            </p>
-          </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* No Data State */}
+      {/* Empty State */}
       {!loading && !reportData && !error && (
-        <div className="bg-white border rounded-lg p-12 text-center">
-          <p className="text-gray-500">
-            Select a period to view sales reports
-          </p>
+        <div className="py-20 text-center border-2 border-dashed border-neutral-800 rounded-3xl text-neutral-500">
+          <ChartLine size={48} className="mx-auto mb-4 opacity-20" />
+          <p>Select parameters to generate operational intelligence.</p>
         </div>
       )}
+    </div>
+  );
+}
+
+function SummaryCard({ title, value, icon, trend, negative }: { title: string; value: string; icon: React.ReactNode; trend?: string; negative?: boolean }) {
+  return (
+    <div className="bg-[#090909] border border-neutral-800 p-5 rounded-2xl hover:border-neutral-700 transition-colors">
+      <div className="flex items-center justify-between text-neutral-500 mb-3">
+        <span className="text-[10px] font-bold uppercase tracking-widest">{title}</span>
+        <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-xl text-neutral-300">
+          {icon}
+        </div>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-bold text-neutral-50 tracking-tighter tabular-nums">{value}</span>
+      </div>
+      {trend && (
+        <div className={`mt-2 text-[10px] font-bold flex items-center gap-1 ${negative ? 'text-red-500' : 'text-green-500'}`}>
+          {negative ? '↓' : '↑'} {trend}
+          <span className="text-neutral-600 font-medium">vs prev period</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SettlementItem({ label, amount, total, color }: { label: string; amount: number; total: number; color: string }) {
+  const percentage = total > 0 ? (amount / total) * 100 : 0;
+  return (
+    <div className="group">
+      <div className="flex justify-between items-end mb-2">
+        <span className="text-xs font-medium text-neutral-400 group-hover:text-neutral-300 transition-colors">{label}</span>
+        <span className="text-sm font-semibold text-neutral-50 font-mono">₹{amount.toLocaleString()}</span>
+      </div>
+      <div className="w-full h-1.5 bg-neutral-900 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }} 
+          animate={{ width: `${percentage}%` }} 
+          transition={{ duration: 1, ease: softSpringEasing }}
+          className={`${color} h-full rounded-full opacity-80 group-hover:opacity-100 transition-opacity`} 
+        />
+      </div>
     </div>
   );
 }

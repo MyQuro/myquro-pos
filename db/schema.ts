@@ -11,3 +11,6 @@ export * from "./schema/order";
 export * from "./schema/order_item";
 export * from "./schema/order_payment";
 export * from "./schema/order_print_event";
+export * from "./schema/customer";
+export * from "./schema/inventory";
+export * from "./schema/vendor";

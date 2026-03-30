@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TwoLevelSidebar } from "@/components/ui/sidebar-component";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -23,27 +23,13 @@ export default async function PosLayout({
 
   // 3. Render POS UI
   return (
-    <div className="min-h-screen flex">
-      {/* POS Navbar */}
-      <aside className="w-64 border-r">
-        <div className="p-4 font-semibold">POS</div>
-        <nav className="flex flex-col p-2 space-y-1">
-          <Link href="/pos/menu" className="px-3 py-2 rounded hover:bg-gray-100">
-            Menu Management
-          </Link>
-          <Link
-            href="/pos/orders"
-            className="px-3 py-2 rounded hover:bg-gray-100"
-          >
-            Order Management
-          </Link>
-          <Link href="/pos/reports" className="px-3 py-2 rounded hover:bg-gray-100">
-            Reports
-          </Link>
-        </nav>
-      </aside>
-
-      <main className="flex-1 p-6">{children}</main>
+    <div className="bg-black min-h-screen flex items-center justify-center p-4">
+      <div className="flex h-[800px] w-full max-w-[1700px] gap-4">
+        <TwoLevelSidebar />
+        <main className="flex-1 bg-[#0a0a0a] rounded-2xl overflow-y-auto border border-neutral-800 shadow-2xl p-8 text-neutral-50 scrollbar-hide">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

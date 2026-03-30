@@ -5,6 +5,7 @@ import {
   integer,
 } from "drizzle-orm/pg-core";
 import { organization } from "./organization";
+import { customers } from "./customer";
 
 export const order = pgTable("order", {
   id: text("id").primaryKey(),
@@ -27,8 +28,13 @@ export const order = pgTable("order", {
   customerName: text("customer_name"),
   customerPhone: text("customer_phone"),
 
+  customerId: text("customer_id")
+    .references(() => customers.id, { onDelete: "set null" }),
+
   subtotal: integer("subtotal"),
   tax: integer("tax"),
+  discountAmount: integer("discount_amount").default(0),
+  manualDiscountAmount: integer("manual_discount_amount").default(0),
   total: integer("total"),
   // all stored ONLY at billing time
 

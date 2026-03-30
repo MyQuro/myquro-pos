@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { menuItem } from "@/db/schema";
+import { menuItem, menuCategory } from "@/db/schema";
 import { requirePosContext } from "@/app/api/pos/_utils";
 import { and, eq, ilike } from "drizzle-orm";
 
@@ -22,8 +22,10 @@ export async function GET(req: Request) {
       itemCode: menuItem.itemCode,
       price: menuItem.price,
       isVeg: menuItem.isVeg,
+      gstRate: menuCategory.gstRate,
     })
     .from(menuItem)
+    .innerJoin(menuCategory, eq(menuItem.categoryId, menuCategory.id))
     .where(
       and(
         eq(menuItem.organizationId, ctx.organizationId),

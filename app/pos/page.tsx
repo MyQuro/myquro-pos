@@ -1,8 +1,12 @@
-import React from 'react'
+import React from 'react';
 import { requireActiveOrganization } from "@/lib/require-active-organization";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { DashboardClient } from './dashboard-client';
+import { db } from "@/db";
+import { order, orderItem } from "@/db/schema";
+import { and, eq, gte, inArray, desc, sum, count } from "drizzle-orm";
 
 export default async function POSPage() {
   const session = await auth.api.getSession({
@@ -13,82 +17,96 @@ export default async function POSPage() {
     redirect("/login");
   }
 
-  await requireActiveOrganization(session.user.id);
+  const { organizationId } = await requireActiveOrganization(session.user.id);
+  
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  // 1. Open Orders Count
+  const openOrdersResult = await db.select({ count: count() })
+    .from(order)
+    .where(and(
+      eq(order.organizationId, organizationId),
+      inArray(order.status, ["OPEN", "BILLED"])
+    ));
+  const openOrdersCount = openOrdersResult[0].count;
+
+  // 2. Completed Orders Count Today
+  const completedOrdersResult = await db.select({ count: count() })
+    .from(order)
+    .where(and(
+      eq(order.organizationId, organizationId),
+      eq(order.status, "PAID"),
+      gte(order.createdAt, startOfToday)
+    ));
+  const completedOrdersCount = completedOrdersResult[0].count;
+
+  // 3. Total Revenue Today
+  const revenueResult = await db.select({ total: sum(order.total) })
+    .from(order)
+    .where(and(
+      eq(order.organizationId, organizationId),
+      eq(order.status, "PAID"),
+      gte(order.createdAt, startOfToday)
+    ));
+  const totalRevenueNumber = Number(revenueResult[0]?.total || 0) / 100;
+  const formattedRevenue = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(totalRevenueNumber);
+
+  // 4. Recent Activity
+  const recentOrdersData = await db.select()
+    .from(order)
+    .where(eq(order.organizationId, organizationId))
+    .orderBy(desc(order.createdAt))
+    .limit(4);
+
+  const formatCurrency = (amount: number | null) => {
+    if (!amount) return "₹0.00";
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount / 100);
+  };
+
+  const recentActivity = recentOrdersData.map(o => {
+    const diffMins = Math.floor((new Date().getTime() - new Date(o.createdAt).getTime()) / 60000);
+    const timeStr = diffMins === 0 ? "Just now" : diffMins < 60 ? `${diffMins} mins ago` : `${Math.floor(diffMins/60)} hrs ago`;
+    return {
+      id: o.orderNumber || o.id.slice(0, 8),
+      type: o.orderType === "DINE_IN" ? "Dine In" : "Takeaway",
+      amount: formatCurrency(o.total),
+      time: timeStr,
+      status: o.status === "PAID" ? "Completed" : o.status === "OPEN" ? "Preparing" : "Ready"
+    };
+  });
+
+  // 5. Top Items Today
+  const topItemsData = await db.select({
+    name: orderItem.itemName,
+    sales: sum(orderItem.quantity).mapWith(Number)
+  })
+  .from(orderItem)
+  .innerJoin(order, eq(orderItem.orderId, order.id))
+  .where(and(
+    eq(order.organizationId, organizationId),
+    eq(order.status, "PAID"),
+    gte(order.createdAt, startOfToday)
+  ))
+  .groupBy(orderItem.itemName)
+  .orderBy(desc(sum(orderItem.quantity)))
+  .limit(4);
+
+  const topItemsMax = Math.max(...topItemsData.map(i => i.sales), 50);
+  const topItems = topItemsData.map(i => ({
+    name: i.name,
+    sales: i.sales,
+    max: topItemsMax
+  }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Point of Sale</h1>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Quick Actions */}
-        <div className="col-span-full">
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <a
-              href="/pos/orders"
-              className="p-6 border rounded-lg hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex flex-col items-center text-center space-y-2">
-                <div className="text-4xl">📋</div>
-                <h3 className="font-semibold">Order Management</h3>
-                <p className="text-sm text-muted-foreground">
-                  Create and manage orders
-                </p>
-              </div>
-            </a>
-
-            <a
-              href="/pos/menu"
-              className="p-6 border rounded-lg hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex flex-col items-center text-center space-y-2">
-                <div className="text-4xl">📖</div>
-                <h3 className="font-semibold">Menu Management</h3>
-                <p className="text-sm text-muted-foreground">
-                  Manage items and categories
-                </p>
-              </div>
-            </a>
-
-            <div className="p-6 border rounded-lg bg-muted/30 cursor-not-allowed">
-              <div className="flex flex-col items-center text-center space-y-2">
-                <div className="text-4xl opacity-50">📊</div>
-                <h3 className="font-semibold text-muted-foreground">Reports</h3>
-                <p className="text-sm text-muted-foreground">Coming soon</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Overview Stats */}
-        <div className="col-span-full">
-          <h2 className="text-xl font-semibold mb-4">Today&apos;s Overview</h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="p-6 border rounded-lg bg-blue-50 dark:bg-blue-950">
-              <div className="text-sm text-muted-foreground mb-1">
-                Open Orders
-              </div>
-              <div className="text-3xl font-bold">-</div>
-            </div>
-
-            <div className="p-6 border rounded-lg bg-green-50 dark:bg-green-950">
-              <div className="text-sm text-muted-foreground mb-1">
-                Completed Orders
-              </div>
-              <div className="text-3xl font-bold">-</div>
-            </div>
-
-            <div className="p-6 border rounded-lg bg-orange-50 dark:bg-orange-950">
-              <div className="text-sm text-muted-foreground mb-1">
-                Total Revenue
-              </div>
-              <div className="text-3xl font-bold">₹0.00</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <DashboardClient 
+      userName={session.user.name} 
+      openOrdersCount={openOrdersCount}
+      completedOrdersCount={completedOrdersCount}
+      formattedRevenue={formattedRevenue}
+      recentActivity={recentActivity}
+      topItems={topItems}
+    />
   );
 }

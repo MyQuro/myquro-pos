@@ -4,9 +4,12 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { organization } from "@/db/schema";
-import { organizationCompliance } from "@/db/schema";
-import { organizationOwner } from "@/db/schema";
+import { 
+  organization, 
+  organizationCompliance, 
+  organizationOwner, 
+  organizationDocument 
+} from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -19,6 +22,13 @@ type SetupOrganizationInput = {
     fssaiType: "BASIC" | "STATE" | "CENTRAL";
     fssaiNumber: string;
     gstin?: string;
+    documents?: Array<{
+        documentType: string;
+        fileName: string;
+        fileMimeType: string;
+        fileSize: number;
+        storageKey: string;
+    }>;
 };
 
 export async function submitSetupOrganization(input: SetupOrganizationInput) {
@@ -67,6 +77,22 @@ export async function submitSetupOrganization(input: SetupOrganizationInput) {
         fssaiNumber: input.fssaiNumber,
         gstin: input.gstin,
     });
+
+    // Save documents
+    if (input.documents && input.documents.length > 0) {
+        for (const doc of input.documents) {
+            await db.insert(organizationDocument).values({
+                id: randomUUID(),
+                organizationId: orgId,
+                documentType: doc.documentType,
+                fileName: doc.fileName,
+                fileMimeType: doc.fileMimeType,
+                fileSize: String(doc.fileSize),
+                storageKey: doc.storageKey,
+            });
+        }
+    }
+
     // TODO: Redirect to pending page
     redirect("/pending");
 }

@@ -1,17 +1,29 @@
 import { requireAdmin } from "@/lib/require-admin";
-import { fetchPendingOrganizations } from "./actions";
-import PendingOrgTable from "@/components/custom/pending-org-table";
+import { fetchPendingOrganizations, fetchActiveOrganizations, fetchAdminStats } from "./actions";
+import { AdminDashboardClient } from "./admin-client";
 import { PendingOrg } from "@/components/custom/pending-org-table";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+
 export default async function AdminPage() {
   await requireAdmin(); // SSR guard
 
-  const allOrgs = await fetchPendingOrganizations();
-  const pendingOrgs = allOrgs.filter((org) => org.createdAt !== null);
+  const [pendingOrgs, activeOrgs, stats] = await Promise.all([
+    fetchPendingOrganizations(),
+    fetchActiveOrganizations(),
+    fetchAdminStats()
+  ]);
+
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
   return (
-    <div className="max-w-5xl mx-auto mt-10 space-y-6">
-      <h1 className="text-xl font-semibold">Pending Organizations</h1>
-      <PendingOrgTable organizations={pendingOrgs as PendingOrg[]} />
-    </div>
+    <AdminDashboardClient 
+      stats={stats} 
+      pendingOrgs={pendingOrgs as PendingOrg[]} 
+      activeOrgs={activeOrgs as PendingOrg[]}
+      adminName={session?.user.name || "Super Admin"}
+    />
   );
 }

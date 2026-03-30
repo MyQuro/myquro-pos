@@ -10,6 +10,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { 
+  CloudUpload, 
+  Document, 
+  CheckmarkOutline, 
+  Error, 
+  Information,
+  Download,
+  InformationSquare
+} from "@carbon/icons-react";
+import { cn } from "@/lib/utils";
 
 type DocumentType = "FSSAI_LICENSE" | "GST_CERTIFICATE" | "OTHER";
 
@@ -21,7 +31,17 @@ interface UploadedDocument {
   status: "uploading" | "completed" | "failed";
 }
 
-export default function UploadDocuments() {
+interface UploadDocumentsProps {
+  onUploadComplete?: (doc: {
+    documentType: string;
+    fileName: string;
+    fileMimeType: string;
+    fileSize: number;
+    storageKey: string;
+  }) => void;
+}
+
+export default function UploadDocuments({ onUploadComplete }: UploadDocumentsProps) {
   const [documentType, setDocumentType] = useState<DocumentType>("FSSAI_LICENSE");
   const [uploading, setUploading] = useState(false);
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
@@ -60,14 +80,10 @@ export default function UploadDocuments() {
     setDocuments((prev) => [...prev, newDoc]);
 
     try {
-      // Create FormData with file and metadata
       const formData = new FormData();
       formData.append("file", file);
       formData.append("documentType", documentType);
 
-      console.log("Uploading file:", file.name, "Size:", file.size, "Type:", file.type);
-
-      // Upload file to our API (which uploads to R2 server-side)
       const uploadResponse = await fetch(
         "/api/organization/documents/presign-upload",
         {
@@ -76,33 +92,13 @@ export default function UploadDocuments() {
         }
       );
 
-      console.log("Upload response status:", uploadResponse.status);
-
       if (!uploadResponse.ok) {
-        const contentType = uploadResponse.headers.get("content-type");
-        let errorMessage = "Failed to upload file";
-        
-        if (contentType && contentType.includes("application/json")) {
-          const errorData = await uploadResponse.json();
-          console.error("Server error data:", errorData);
-          errorMessage = errorData.details || errorData.error || errorMessage;
-        } else {
-          const text = await uploadResponse.text();
-          console.error("Non-JSON response:", text);
-          errorMessage = `Server error: ${uploadResponse.status}`;
-        }
-        
-        throw new Error(errorMessage);
+        throw new Error("Failed to upload file");
       }
 
       const uploadData = await uploadResponse.json();
-      console.log("Upload successful:", uploadData);
-
       const { objectKey, fileName, fileSize } = uploadData;
 
-      console.log("Saving metadata for:", objectKey);
-
-      // Save metadata to database
       const metadataResponse = await fetch(
         "/api/organization/documents/save-metadata",
         {
@@ -118,22 +114,22 @@ export default function UploadDocuments() {
         }
       );
 
-      console.log("Metadata response status:", metadataResponse.status);
-
       if (!metadataResponse.ok) {
-        const errorData = await metadataResponse.json();
-        console.error("Metadata save failed:", errorData);
-        setError(`File uploaded but metadata save failed: ${errorData.error || 'Unknown error'}`);
-      } else {
-        const metadataResult = await metadataResponse.json();
-        console.log("Metadata save result:", metadataResult);
-        
-        if (metadataResult.pendingMetadata) {
-          console.log("Metadata will be saved after organization setup");
-        }
+        throw new Error("Failed to save metadata");
       }
 
-      // Update document status to completed
+      const metadataResult = await metadataResponse.json();
+      
+      if (metadataResult.pendingMetadata) {
+        onUploadComplete?.({
+          documentType,
+          fileName,
+          fileMimeType: file.type,
+          fileSize,
+          storageKey: objectKey,
+        });
+      }
+
       setDocuments((prev) =>
         prev.map((doc) =>
           doc.id === tempId ? { ...doc, status: "completed" } : doc
@@ -142,8 +138,6 @@ export default function UploadDocuments() {
     } catch (err) {
       console.error("Upload error:", err);
       setError(err instanceof Error ? err.message : "Upload failed");
-      
-      // Update document status to failed
       setDocuments((prev) =>
         prev.map((doc) =>
           doc.id === tempId ? { ...doc, status: "failed" } : doc
@@ -151,7 +145,6 @@ export default function UploadDocuments() {
       );
     } finally {
       setUploading(false);
-      // Reset the input
       e.target.value = "";
     }
   };
@@ -164,139 +157,146 @@ export default function UploadDocuments() {
 
   const getDocumentTypeLabel = (type: DocumentType) => {
     switch (type) {
-      case "FSSAI_LICENSE":
-        return "FSSAI License";
-      case "GST_CERTIFICATE":
-        return "GST Certificate";
-      case "OTHER":
-        return "Other Document";
+      case "FSSAI_LICENSE": return "FSSAI License";
+      case "GST_CERTIFICATE": return "GST Certificate";
+      case "OTHER": return "Other Document";
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold mb-2">Upload Documents</h2>
-        <p className="text-sm text-gray-600">
-          Upload your business documents like FSSAI license, GST certificate, etc.
+    <div className="space-y-8">
+      <div className="space-y-1">
+        <h2 className="text-xl font-bold text-white tracking-tight">Verification Documents</h2>
+        <p className="text-sm text-neutral-500 font-medium">
+          Upload essential business documents for faster verification.
         </p>
       </div>
 
-      {/* Upload Form */}
-      <div className="bg-white border rounded-lg p-6 space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="documentType">Document Type</Label>
-          <Select
-            value={documentType}
-            onValueChange={(value) => setDocumentType(value as DocumentType)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="FSSAI_LICENSE">FSSAI License</SelectItem>
-              <SelectItem value="GST_CERTIFICATE">GST Certificate</SelectItem>
-              <SelectItem value="OTHER">Other Document</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="file">Select File</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="file"
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={handleFileUpload}
-              disabled={uploading}
-              className="cursor-pointer"
-            />
-            {uploading && (
-              <span className="text-sm text-gray-500">Uploading...</span>
-            )}
+      {/* Upload Zone */}
+      <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-[32px] p-8 backdrop-blur-sm shadow-2xl space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 ml-1">Document Type</Label>
+            <Select
+              value={documentType}
+              onValueChange={(value) => setDocumentType(value as DocumentType)}
+            >
+              <SelectTrigger className="bg-neutral-950 border-neutral-800 h-12 rounded-xl text-white focus:ring-1 focus:ring-white/20 transition-all">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-neutral-900 border-neutral-800 text-white">
+                <SelectItem value="FSSAI_LICENSE">FSSAI License</SelectItem>
+                <SelectItem value="GST_CERTIFICATE">GST Certificate</SelectItem>
+                <SelectItem value="OTHER">Other Document</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <p className="text-xs text-gray-500">
-            Accepted formats: PDF, PNG, JPEG (Max 10MB)
-          </p>
+
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 ml-1">Select File</Label>
+            <div className="relative group">
+              <Input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg"
+                onChange={handleFileUpload}
+                disabled={uploading}
+                className="absolute inset-0 opacity-0 cursor-pointer z-10 h-12"
+              />
+              <div className={cn(
+                "h-12 bg-neutral-950 border border-neutral-800 rounded-xl flex items-center px-4 gap-3 text-neutral-400 group-hover:border-neutral-700 transition-all",
+                uploading && "opacity-50"
+              )}>
+                <CloudUpload size={20} className={cn(uploading && "animate-bounce")} />
+                <span className="text-[13px] font-medium leading-none">
+                  {uploading ? "Uploading sequence..." : "Choose PDF or Image"}
+                </span>
+                <div className="ml-auto px-2 py-1 bg-neutral-900 border border-neutral-800 rounded-lg text-[9px] font-bold uppercase tracking-widest">
+                  Browse
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-md p-3 text-sm">
-            <strong>Error:</strong> {error}
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-[13px] font-medium"
+          >
+            <Error size={18} />
+            {error}
+          </motion.div>
         )}
       </div>
 
       {/* Uploaded Documents List */}
-      {documents.length > 0 && (
-        <div className="bg-white border rounded-lg p-6">
-          <h3 className="text-lg font-medium mb-4">Uploaded Documents</h3>
-          <div className="space-y-3">
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between p-3 border rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
-                      doc.status === "completed"
-                        ? "bg-green-100"
-                        : doc.status === "failed"
-                        ? "bg-red-100"
-                        : "bg-blue-100"
-                    }`}
-                  >
-                    {doc.status === "completed"
-                      ? "✓"
-                      : doc.status === "failed"
-                      ? "✗"
-                      : "⏳"}
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">{doc.fileName}</p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>{getDocumentTypeLabel(doc.documentType)}</span>
-                      <span>•</span>
-                      <span>{formatFileSize(doc.fileSize)}</span>
+      <div className="space-y-4">
+        {documents.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3">
+             {documents.map((doc) => (
+                <motion.div
+                  key={doc.id}
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center justify-between p-4 bg-neutral-900/60 border border-neutral-800/80 rounded-[28px] hover:bg-neutral-900/80 transition-all duration-300 group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={cn(
+                      "size-12 rounded-2xl flex items-center justify-center border transition-all duration-500 shadow-lg",
+                      doc.status === 'completed' ? "bg-green-500/10 border-green-500/30 text-green-400" :
+                      doc.status === 'failed' ? "bg-red-500/10 border-red-500/30 text-red-400" :
+                      "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                    )}>
+                      {doc.status === 'completed' ? <CheckmarkOutline size={22} /> :
+                       doc.status === 'failed' ? <Error size={22} /> :
+                       <Document size={22} className="animate-pulse" />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-[14px] text-neutral-100 tracking-tight">{doc.fileName}</p>
+                      <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest mt-0.5">
+                        {getDocumentTypeLabel(doc.documentType)} • {formatFileSize(doc.fileSize)}
+                      </p>
                     </div>
                   </div>
-                </div>
-                <div>
-                  {doc.status === "completed" && (
-                    <span className="text-xs text-green-600 font-medium">
-                      Uploaded
-                    </span>
-                  )}
-                  {doc.status === "failed" && (
-                    <span className="text-xs text-red-600 font-medium">
-                      Failed
-                    </span>
-                  )}
-                  {doc.status === "uploading" && (
-                    <span className="text-xs text-blue-600 font-medium">
-                      Uploading...
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+                  <div className="px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-neutral-950 border border-neutral-800 text-neutral-500">
+                    {doc.status}
+                  </div>
+                </motion.div>
+             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="py-20 text-center bg-neutral-900/20 border-2 border-dashed border-neutral-800/50 rounded-[40px]">
+             <div className="size-16 rounded-3xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-700 mx-auto mb-6">
+                <Document size={32} />
+             </div>
+             <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-neutral-600">Pending Secure Upload</p>
+          </div>
+        )}
+      </div>
 
-      {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-blue-900 mb-2">
-          📋 Document Upload Guidelines
-        </h4>
-        <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-          <li>Upload clear, readable copies of your documents</li>
-          <li>Ensure all text and details are visible</li>
-          <li>FSSAI License and GST Certificate are recommended for compliance</li>
-          <li>Files are securely stored and encrypted</li>
-        </ul>
+      {/* Guidelines */}
+      <div className="p-6 bg-blue-500/5 border border-blue-500/10 rounded-[32px] flex gap-4 items-start">
+         <div className="size-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 flex-shrink-0">
+            <InformationSquare size={20} />
+         </div>
+         <div className="space-y-2">
+            <h4 className="text-[13px] font-bold text-blue-400 uppercase tracking-widest">Upload Guidelines</h4>
+            <ul className="text-[13px] text-neutral-500 font-medium leading-relaxed grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+               <li className="flex items-center gap-2">
+                  <div className="size-1 bg-blue-500/40 rounded-full" /> Max file size: 10MB
+               </li>
+               <li className="flex items-center gap-2">
+                  <div className="size-1 bg-blue-500/40 rounded-full" /> Formats: PDF, PNG, JPG
+               </li>
+               <li className="flex items-center gap-2">
+                  <div className="size-1 bg-blue-500/40 rounded-full" /> Clear, readable scan
+               </li>
+               <li className="flex items-center gap-2">
+                  <div className="size-1 bg-blue-500/40 rounded-full" /> Secure encryption
+               </li>
+            </ul>
+         </div>
       </div>
     </div>
   );

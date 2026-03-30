@@ -13,3 +13,5 @@ export const auth = betterAuth({
     autoSignIn: true, // Automatically sign in the user after sign-up
   },
 });
+
+export type Auth = typeof auth;

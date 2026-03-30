@@ -35,7 +35,7 @@ export default function OrdersPage() {
       <OrdersTopBar onNewOrder={handleNewOrder} />
 
       {/* Main workspace */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
         {/* Left: Orders */}
         <OrderListPanel
           activeOrderId={activeOrderId}
@@ -57,6 +57,10 @@ export default function OrdersPage() {
           onEditOrder={() => setEditOpen(true)}
           onRefreshReady={(refreshFn) => {
             orderDetailRefreshRef.current = refreshFn;
+          }}
+          onBilled={() => {
+            // Refresh the order list when an order is billed or paid
+            orderListRefreshRef.current?.();
           }}
         />
       </div>

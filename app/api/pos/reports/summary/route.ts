@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { order, orderPayment } from "@/db/schema";
+import { order, orderPayment, purchases, orderItem, menuItem, customers } from "@/db/schema";
 import { requirePosContext } from "@/app/api/pos/_utils";
 import { eq, and, gte, lte, sum, sql } from "drizzle-orm";
 
@@ -8,56 +8,38 @@ import { eq, and, gte, lte, sum, sql } from "drizzle-orm";
 
 function getDailyRange() {
   const now = new Date();
-
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
-
   return { start, end };
 }
 
 function getWeekRange() {
   const now = new Date();
-  const day = now.getDay(); // 0 = Sunday
+  const day = now.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
-
   const start = new Date(now);
   start.setDate(now.getDate() + diffToMonday);
   start.setHours(0, 0, 0, 0);
-
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   end.setHours(23, 59, 59, 999);
-
   return { start, end };
 }
 
 function getMonthRange() {
   const now = new Date();
-
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
-
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   end.setHours(23, 59, 59, 999);
-
   return { start, end };
 }
 
 /* ---------- CSV Helper ---------- */
 
-function generateCSV(data: {
-  period: string;
-  start: Date;
-  end: Date;
-  totalOrders: number;
-  totalRevenue: number;
-  cashRevenue: number;
-  upiRevenue: number;
-  cardRevenue: number;
-}) {
+function generateCSV(data: any) {
   const formatAmount = (amount: number) => (amount / 100).toFixed(2);
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("en-IN", {
@@ -67,75 +49,33 @@ function generateCSV(data: {
     });
   };
   
-  const avgOrderValue = data.totalOrders > 0 
-    ? (data.totalRevenue / data.totalOrders / 100).toFixed(2)
-    : "0.00";
-
-  const totalRevenue = parseFloat(formatAmount(data.totalRevenue));
-  const cashAmount = parseFloat(formatAmount(data.cashRevenue));
-  const upiAmount = parseFloat(formatAmount(data.upiRevenue));
-  const cardAmount = parseFloat(formatAmount(data.cardRevenue));
-
-  const cashPercent = totalRevenue > 0 ? ((cashAmount / totalRevenue) * 100).toFixed(2) : "0.00";
-  const upiPercent = totalRevenue > 0 ? ((upiAmount / totalRevenue) * 100).toFixed(2) : "0.00";
-  const cardPercent = totalRevenue > 0 ? ((cardAmount / totalRevenue) * 100).toFixed(2) : "0.00";
-
   const periodName = data.period.charAt(0).toUpperCase() + data.period.slice(1);
-  const generatedDate = new Date().toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const generatedDate = new Date().toLocaleString("en-IN");
 
   const csv = [
-    // Header
-    ["SALES REPORT"],
+    ["SALES & PROFIT REPORT"],
     [""],
-    
-    // Report Info
     ["Report Type:", periodName],
     ["Period Start:", formatDate(data.start)],
     ["Period End:", formatDate(data.end)],
     ["Generated On:", generatedDate],
-    ["Currency:", "INR"],
     [""],
-    
-    // Summary Section
-    ["=== SUMMARY ==="],
-    [""],
-    ["Metric", "Value"],
+    ["=== FINANCIAL SUMMARY ==="],
+    ["Metric", "Value (INR)"],
     ["Total Orders", data.totalOrders.toString()],
     ["Total Revenue", formatAmount(data.totalRevenue)],
-    ["Average Order Value", avgOrderValue],
+    ["Total Purchase Cost", formatAmount(data.totalCost)],
+    ["Gross Profit", formatAmount(data.totalRevenue - data.totalCost)],
     [""],
-    
-    // Payment Breakdown Section
     ["=== PAYMENT BREAKDOWN ==="],
+    ["Method", "Amount (INR)"],
+    ["Cash", formatAmount(data.paymentBreakdown.cash)],
+    ["UPI", formatAmount(data.paymentBreakdown.upi)],
+    ["Card", formatAmount(data.paymentBreakdown.card)],
     [""],
-    ["Payment Method", "Amount (INR)", "Percentage (%)", "Number of Decimal Places"],
-    ["Cash", cashAmount.toFixed(2), cashPercent, "2"],
-    ["UPI", upiAmount.toFixed(2), upiPercent, "2"],
-    ["Card", cardAmount.toFixed(2), cardPercent, "2"],
-    [""],
-    ["Total", totalRevenue.toFixed(2), "100.00", "2"],
-    [""],
-    
-    // Additional Metrics
-    ["=== ADDITIONAL METRICS ==="],
-    [""],
-    ["Metric", "Value"],
-    ["Revenue per Order", avgOrderValue],
-    ["Cash Transactions", cashAmount.toFixed(2)],
-    ["Digital Transactions (UPI + Card)", (upiAmount + cardAmount).toFixed(2)],
-    ["Digital Payment Percentage", totalRevenue > 0 ? (((upiAmount + cardAmount) / totalRevenue) * 100).toFixed(2) + "%" : "0.00%"],
-    [""],
-    
-    // Footer
-    [""],
-    ["---"],
-    ["End of Report"],
+    ["=== TOP PRODUCTS ==="],
+    ["Product", "Qty", "Revenue"],
+    ...data.topProducts.map((p: any) => [p.name, p.totalQuantity, formatAmount(p.revenue)]),
   ];
 
   return csv.map(row => row.join(",")).join("\n");
@@ -148,11 +88,10 @@ export async function GET(req: Request) {
   if ("error" in ctx) return ctx.error;
 
   const { searchParams } = new URL(req.url);
-
   const period = searchParams.get("period");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
-  const format = searchParams.get("format"); // 'csv' or 'json'
+  const format = searchParams.get("format");
 
   let start: Date;
   let end: Date;
@@ -166,103 +105,143 @@ export async function GET(req: Request) {
   } else if (from && to) {
     start = new Date(from);
     end = new Date(to);
-
-    // Normalize time bounds
     start.setHours(0, 0, 0, 0);
     end.setHours(23, 59, 59, 999);
   } else {
-    return NextResponse.json(
-      { error: "Invalid period or date range" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid range" }, { status: 400 });
   }
 
-  /* ---------- SQL Aggregation ---------- */
-
-  const [result] = await db
-    .select({
-      totalOrders: sql<number>`COUNT(DISTINCT ${order.id})`,
-      totalRevenue: sum(order.total),
-
-      cashRevenue: sql<number>`
-        SUM(
-          CASE 
-            WHEN ${orderPayment.paymentMethod} = 'CASH' 
-            THEN ${order.total} 
-            ELSE 0 
-          END
+  try {
+    // 1. Order Stats
+    const [orderStats] = await db
+      .select({
+        totalOrders: sql<number>`COUNT(${order.id})`,
+        totalRevenue: sum(order.total),
+      })
+      .from(order)
+      .where(
+        and(
+          eq(order.organizationId, ctx.organizationId),
+          eq(order.status, "PAID"),
+          gte(order.paidAt, start),
+          lte(order.paidAt, end)
         )
-      `,
+      );
 
-      upiRevenue: sql<number>`
-        SUM(
-          CASE 
-            WHEN ${orderPayment.paymentMethod} = 'UPI' 
-            THEN ${order.total} 
-            ELSE 0 
-          END
+    // 2. Payment Stats
+    const paymentStats = await db
+      .select({
+        method: orderPayment.paymentMethod,
+        amount: sum(orderPayment.amount),
+      })
+      .from(orderPayment)
+      .innerJoin(order, eq(orderPayment.orderId, order.id))
+      .where(
+        and(
+          eq(order.organizationId, ctx.organizationId),
+          eq(order.status, "PAID"),
+          gte(order.paidAt, start),
+          lte(order.paidAt, end)
         )
-      `,
-
-      cardRevenue: sql<number>`
-        SUM(
-          CASE 
-            WHEN ${orderPayment.paymentMethod} = 'CARD' 
-            THEN ${order.total} 
-            ELSE 0 
-          END
-        )
-      `,
-    })
-    .from(order)
-    .leftJoin(orderPayment, eq(orderPayment.orderId, order.id))
-    .where(
-      and(
-        eq(order.organizationId, ctx.organizationId),
-        eq(order.status, "PAID"),
-        gte(order.paidAt, start),
-        lte(order.paidAt, end)
       )
-    );
+      .groupBy(orderPayment.paymentMethod);
 
-  const reportData = {
-    period: period || "custom",
-    start,
-    end,
-    totalOrders: Number(result?.totalOrders ?? 0),
-    totalRevenue: Number(result?.totalRevenue ?? 0),
-    cashRevenue: Number(result?.cashRevenue ?? 0),
-    upiRevenue: Number(result?.upiRevenue ?? 0),
-    cardRevenue: Number(result?.cardRevenue ?? 0),
-  };
+    // 3. Purchase Cost
+    const [purchaseCost] = await db
+      .select({
+        total: sum(purchases.totalCost),
+      })
+      .from(purchases)
+      .where(
+        and(
+          eq(purchases.organizationId, ctx.organizationId),
+          gte(purchases.purchaseDate, start),
+          lte(purchases.purchaseDate, end)
+        )
+      );
 
-  /* ---------- CSV Export ---------- */
+    // 4. Top Products
+    const topProducts = await db
+      .select({
+        id: orderItem.menuItemId,
+        name: orderItem.itemName,
+        totalQuantity: sum(orderItem.quantity),
+        revenue: sum(orderItem.lineTotal),
+      })
+      .from(orderItem)
+      .innerJoin(order, eq(orderItem.orderId, order.id))
+      .where(
+        and(
+          eq(order.organizationId, ctx.organizationId),
+          eq(order.status, "PAID"),
+          gte(order.paidAt, start),
+          lte(order.paidAt, end)
+        )
+      )
+      .groupBy(orderItem.menuItemId, orderItem.itemName)
+      .orderBy(sql`SUM(${orderItem.quantity}) DESC`)
+      .limit(5);
 
-  if (format === "csv") {
-    const csv = generateCSV(reportData);
-    
-    const filename = `sales-report-${period || "custom"}-${start.toISOString().split("T")[0]}-to-${end.toISOString().split("T")[0]}.csv`;
+    // 5. Customer Segments
+    const customerStats = await db
+      .select({
+        segment: customers.segment,
+        count: sql<number>`COUNT(${order.id})`,
+        revenue: sum(order.total),
+      })
+      .from(order)
+      .innerJoin(customers, eq(order.customerId, customers.id))
+      .where(
+        and(
+          eq(order.organizationId, ctx.organizationId),
+          eq(order.status, "PAID"),
+          gte(order.paidAt, start),
+          lte(order.paidAt, end)
+        )
+      )
+      .groupBy(customers.segment);
 
-    return new NextResponse(csv, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
+    const breakdown = { cash: 0, upi: 0, card: 0 };
+    paymentStats.forEach(p => {
+      const amt = Number(p.amount ?? 0);
+      if (p.method === "CASH") breakdown.cash = amt;
+      else if (p.method === "UPI") breakdown.upi = amt;
+      else if (p.method === "CARD") breakdown.card = amt;
     });
+
+    const finalData = {
+      period: period || "custom",
+      start,
+      end,
+      totalOrders: Number(orderStats?.totalOrders ?? 0),
+      totalRevenue: Number(orderStats?.totalRevenue ?? 0),
+      totalCost: Number(purchaseCost?.total ?? 0),
+      topProducts: topProducts.map(p => ({
+        ...p,
+        totalQuantity: Number(p.totalQuantity),
+        revenue: Number(p.revenue)
+      })),
+      customerSegments: customerStats.map(c => ({
+        ...c,
+        count: Number(c.count),
+        revenue: Number(c.revenue)
+      })),
+      paymentBreakdown: breakdown,
+    };
+
+    if (format === "csv") {
+      const csv = generateCSV(finalData);
+      return new NextResponse(csv, {
+        headers: {
+          "Content-Type": "text/csv",
+          "Content-Disposition": `attachment; filename="report.csv"`,
+        },
+      });
+    }
+
+    return NextResponse.json(finalData);
+  } catch (err) {
+    console.error("Report error", err);
+    return NextResponse.json({ error: "Failed to generate report" }, { status: 500 });
   }
-
-  /* ---------- JSON Response ---------- */
-
-  return NextResponse.json({
-    period: reportData.period,
-    start: reportData.start,
-    end: reportData.end,
-    totalOrders: reportData.totalOrders,
-    totalRevenue: reportData.totalRevenue,
-    paymentBreakdown: {
-      cash: reportData.cashRevenue,
-      upi: reportData.upiRevenue,
-      card: reportData.cardRevenue,
-    },
-  });
 }

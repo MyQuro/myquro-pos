@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { order, orderItem, menuItem } from "@/db/schema";
+import { order, orderItem, menuItem, menuCategory, customers } from "@/db/schema";
 import { requirePosContext } from "@/app/api/pos/_utils";
 import { generateTakeawayOrderNumber } from "@/lib/pos/generateTakeawayOrderNumber";
 import { eq, and, inArray, desc } from "drizzle-orm";
@@ -86,8 +86,12 @@ export async function POST(req: Request) {
     tableLabel,
     customerName,
     customerPhone,
+    customerId,
     items,
+    manualDiscountAmount: manualDiscountAmountRaw,
   } = body;
+
+  const manualDiscountAmount = parseInt(manualDiscountAmountRaw) || 0;
 
   /* ---------- Validation ---------- */
 
@@ -123,8 +127,16 @@ export async function POST(req: Request) {
   /* ---------- Fetch menu items ---------- */
 
   const dbItems = await db
-    .select()
+    .select({
+      id: menuItem.id,
+      name: menuItem.name,
+      itemCode: menuItem.itemCode,
+      price: menuItem.price,
+      isAvailable: menuItem.isAvailable,
+      gstRate: menuCategory.gstRate,
+    })
     .from(menuItem)
+    .innerJoin(menuCategory, eq(menuItem.categoryId, menuCategory.id))
     .where(
       and(
         eq(menuItem.organizationId, ctx.organizationId),
@@ -153,6 +165,34 @@ export async function POST(req: Request) {
 
   const status = orderType === "TAKEAWAY" ? "BILLED" : "OPEN";
 
+  // Calculate totals & discounts
+  let discountRate = 0;
+  if (customerId) {
+    const [c] = await db
+      .select({ segment: customers.segment })
+      .from(customers)
+      .where(eq(customers.id, customerId));
+      
+    if (c?.segment === "Wholesale") discountRate = 0.10;
+    else if (c?.segment === "Loyal") discountRate = 0.05;
+  }
+
+  let subtotal = 0;
+  let tax = 0;
+
+  for (const item of items) {
+    const m = menuItemMap.get(item.menuItemId)!;
+    const lineTotal = m.price * item.quantity;
+    subtotal += lineTotal;
+
+    const discountedLineTotal = lineTotal * (1 - discountRate);
+    tax += discountedLineTotal * (m.gstRate / 100);
+  }
+
+  const discountAmount = Math.round(subtotal * discountRate);
+  tax = Math.round(tax);
+  const total = subtotal - discountAmount - manualDiscountAmount + tax;
+
   try {
     await db.insert(order).values({
       id: orderId,
@@ -163,6 +203,12 @@ export async function POST(req: Request) {
       orderNumber,
       customerName,
       customerPhone,
+      customerId: customerId || null,
+      subtotal: orderType === "TAKEAWAY" ? subtotal : null,
+      tax: orderType === "TAKEAWAY" ? tax : null,
+      discountAmount: orderType === "TAKEAWAY" ? discountAmount : 0,
+      manualDiscountAmount: orderType === "TAKEAWAY" ? manualDiscountAmount : 0,
+      total: orderType === "TAKEAWAY" ? total : null,
       billedAt: orderType === "TAKEAWAY" ? new Date() : null,
     });
 
@@ -182,7 +228,7 @@ export async function POST(req: Request) {
     }
 
     // 🔑 EXACT response the modal expects
-    return NextResponse.json({ orderId }, { status: 201 });
+    return NextResponse.json({ orderId, total: orderType === "TAKEAWAY" ? total : undefined }, { status: 201 });
   } catch (err) {
     console.error("POST /api/pos/orders failed", err);
     return NextResponse.json(

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { order, orderItem } from "@/db/schema";
+import { order, orderItem, menuItem, menuCategory, customers } from "@/db/schema";
 import { requirePosContext } from "@/app/api/pos/_utils";
 import { eq, and } from "drizzle-orm";
 
@@ -50,11 +50,16 @@ export async function POST(
     );
   }
 
-  /* ---------- Fetch Items ---------- */
+  /* ---------- Fetch Items & Rates ---------- */
 
   const items = await db
-    .select()
+    .select({
+      lineTotal: orderItem.lineTotal,
+      gstRate: menuCategory.gstRate,
+    })
     .from(orderItem)
+    .innerJoin(menuItem, eq(orderItem.menuItemId, menuItem.id))
+    .innerJoin(menuCategory, eq(menuItem.categoryId, menuCategory.id))
     .where(eq(orderItem.orderId, orderId));
 
   if (items.length === 0) {
@@ -66,13 +71,31 @@ export async function POST(
 
   /* ---------- Calculate Totals ---------- */
 
-  const subtotal = items.reduce((sum, i) => {
-    const line = Number(i.lineTotal) || 0;
-    return sum + line;
-  }, 0);
+  let discountRate = 0;
+  if (o.customerId) {
+    const [c] = await db
+      .select({ segment: customers.segment })
+      .from(customers)
+      .where(eq(customers.id, o.customerId));
+      
+    if (c?.segment === "Wholesale") discountRate = 0.10;
+    else if (c?.segment === "Loyal") discountRate = 0.05;
+  }
 
-  const tax = 0; // Add GST later
-  const total = subtotal + tax;
+  let subtotal = 0;
+  let tax = 0;
+
+  for (const i of items) {
+    const line = Number(i.lineTotal) || 0;
+    subtotal += line;
+
+    const discountedLineTotal = line * (1 - discountRate);
+    tax += discountedLineTotal * (i.gstRate / 100);
+  }
+
+  const discountAmount = Math.round(subtotal * discountRate);
+  tax = Math.round(tax);
+  const total = subtotal - discountAmount + tax;
 
   const now = new Date();
 
@@ -84,6 +107,7 @@ export async function POST(
       status: "BILLED",
       subtotal,
       tax,
+      discountAmount,
       total,
       billedAt: now,
     })
@@ -107,6 +131,7 @@ export async function POST(
     success: true,
     orderId,
     subtotal,
+    discountAmount,
     tax,
     total,
   });

@@ -10,6 +10,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { motion, AnimatePresence } from "framer-motion";
+import { Close, Add, TrashCan, Receipt, Search } from "@carbon/icons-react";
+import { cn } from "@/lib/utils";
 
 type OrderEditModalProps = {
   open: boolean;
@@ -131,84 +134,83 @@ export default function OrderEditModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl h-[80vh] p-0 gap-0 flex flex-col">
+      <DialogContent className="!max-w-2xl !h-[80vh] !p-0 !gap-0 flex flex-col bg-[#0a0a0a] border-neutral-800 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
         {/* Header */}
-        <DialogHeader className="px-6 py-4 border-b shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl">Edit Order</DialogTitle>
-            {status && (
-              <span
-                className={`text-xs font-medium px-3 py-1 rounded-full ${
-                  status === "OPEN"
-                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                    : status === "BILLED"
-                    ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"
-                    : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                }`}
-              >
-                {status}
-              </span>
-            )}
+        <DialogHeader className="px-8 py-6 border-b border-neutral-800 bg-[#0a0a0a] shrink-0 flex flex-row items-center justify-between z-20 space-y-0">
+          <div className="flex items-center gap-4">
+             <div className="size-10 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-400">
+               <Receipt size={20} />
+             </div>
+             <div>
+               <DialogTitle className="text-xl font-bold text-neutral-50 tracking-tight">Edit Order</DialogTitle>
+               <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest mt-1">Order Summary • Session {orderId?.slice(0, 8).toUpperCase()}</p>
+             </div>
           </div>
+          {status && (
+            <span
+              className={cn(
+                "text-[10px] font-bold px-3 py-1 rounded-full border uppercase tracking-widest flex items-center gap-2",
+                status === "OPEN" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                status === "BILLED" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                "bg-green-500/10 text-green-400 border-green-500/20"
+              )}
+            >
+              <span className={cn(
+                "size-1.5 rounded-full",
+                status === "OPEN" ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" :
+                status === "BILLED" ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]" :
+                "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"
+              )} />
+              {status}
+            </span>
+          )}
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-8 py-6 bg-[#0a0a0a] scrollbar-hide">
           {!editable ? (
-            <div className="bg-muted/50 border border-border rounded-lg p-4 mb-4">
-              <p className="text-sm text-muted-foreground">
-                ⓘ This order can no longer be edited because it has been{" "}
-                {status === "BILLED" ? "billed" : "paid"}.
+            <div className="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-4 mb-6 flex items-start gap-3">
+              <div className="size-5 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500 shrink-0 mt-0.5">
+                <Receipt size={12} />
+              </div>
+              <p className="text-[12px] font-medium text-neutral-400 leading-relaxed">
+                This order is locked because it has been{" "}
+                <span className="text-orange-400 font-bold uppercase">{status === "BILLED" ? "billed" : "paid"}</span>. 
+                Edit operations are suspended for finalized records.
               </p>
             </div>
           ) : (
-            <div className="mb-6">
-              <Label htmlFor="item-search" className="text-sm font-medium mb-2">
-                Add Item by Code
-              </Label>
-              <div className="flex gap-2 mt-2">
-                <Input
-                  id="item-search"
-                  placeholder="Enter item code (e.g., F001)"
-                  value={searchCode}
-                  onChange={(e) => setSearchCode(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && searchCode.trim()) {
-                      addItemByCode(searchCode);
-                    }
-                  }}
-                  disabled={addingItem}
-                  className="flex-1"
-                />
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-3">
+                 <Label htmlFor="item-search" className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">
+                   Quick Add Item
+                 </Label>
+                 <span className="text-[10px] font-bold text-neutral-500">Scan SKU or Enter Code</span>
+              </div>
+              <div className="flex gap-2 group">
+                <div className="relative flex-1">
+                   <Input
+                     id="item-search"
+                     placeholder="Search by code (e.g., F001)"
+                     value={searchCode}
+                     onChange={(e) => setSearchCode(e.target.value)}
+                     onKeyDown={(e) => {
+                       if (e.key === "Enter" && searchCode.trim()) {
+                         addItemByCode(searchCode);
+                       }
+                     }}
+                     disabled={addingItem}
+                     className="h-12 bg-neutral-900 border-neutral-800 focus:border-neutral-700 text-neutral-100 rounded-xl pl-10"
+                   />
+                   <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-700 group-focus-within:text-neutral-400" />
+                </div>
                 <Button
                   onClick={() => addItemByCode(searchCode)}
                   disabled={!searchCode.trim() || addingItem}
-                  className="shrink-0"
+                  className="h-12 px-6 bg-neutral-50 hover:bg-white text-black font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all active:scale-95"
                 >
                   {addingItem ? (
-                    <>
-                      <svg
-                        className="animate-spin -ml-1 mr-2 h-4 w-4"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      Adding...
-                    </>
+                    <div className="size-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                   ) : (
                     "Add Item"
                   )}
@@ -218,190 +220,110 @@ export default function OrderEditModal({
           )}
 
           {/* Items List */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">
-                Order Items ({items.length})
-              </h3>
-              {!loading && items.length > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  Total: ₹{(total / 100).toFixed(2)}
-                </span>
-              )}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-4">
+               <h3 className="text-[11px] font-bold text-neutral-500 uppercase tracking-widest">
+                 Order Items ({items.length})
+               </h3>
+               {!loading && items.length > 0 && (
+                 <span className="text-[11px] font-bold text-neutral-400 tabular-nums">
+                   SUBTOTAL: ₹{(total / 100).toFixed(2)}
+                 </span>
+               )}
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <svg
-                    className="animate-spin h-8 w-8 mx-auto mb-2 text-primary"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  <p className="text-sm text-muted-foreground">Loading order...</p>
-                </div>
+              <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-40">
+                <div className="size-10 border-4 border-neutral-900 border-t-neutral-500 rounded-full animate-spin" />
+                <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-600">Retrieving Order Data</p>
               </div>
             ) : items.length === 0 ? (
-              <div className="border-2 border-dashed rounded-lg py-12 text-center">
-                <p className="text-muted-foreground text-sm">
-                  No items in this order
-                </p>
+              <div className="border-2 border-dashed border-neutral-800 rounded-3xl py-16 text-center bg-neutral-900/10">
+                <Receipt size={32} className="mx-auto mb-4 text-neutral-700 opacity-50" />
+                <p className="text-[11px] font-bold text-neutral-600 uppercase tracking-widest">Zero Items Found</p>
                 {editable && (
-                  <p className="text-muted-foreground text-xs mt-1">
-                    Add items using the search above
-                  </p>
+                  <p className="text-[11px] text-neutral-700 mt-2">Use the search above to add products</p>
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
+              <AnimatePresence mode="popLayout">
                 {items.map((item, index) => (
-                  <div
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ delay: index * 0.05 }}
                     key={item.id}
-                    className="group relative bg-card border rounded-lg p-4 transition-all hover:shadow-md hover:border-primary/50"
-                    style={{
-                      animation: "fadeIn 0.3s ease-in-out",
-                      animationDelay: `${index * 0.05}s`,
-                      animationFillMode: "backwards",
-                    }}
+                    className="group bg-neutral-900/40 border border-neutral-800 rounded-2xl p-5 hover:bg-neutral-900 transition-all duration-300"
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline gap-2 mb-1">
-                          <h4 className="font-medium text-base truncate">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-3 mb-1.5">
+                          <h4 className="font-bold text-[15px] text-neutral-200 group-hover:text-white transition-colors truncate">
                             {item.itemName}
                           </h4>
-                          <span className="text-xs text-muted-foreground font-mono shrink-0">
-                            {item.itemCode}
+                          <span className="text-[10px] font-mono text-neutral-600 group-hover:text-neutral-500 transition-colors uppercase tracking-widest bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
+                             ID: {item.itemCode}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                          <span>Qty: {item.quantity}</span>
-                          <span className="text-xs">•</span>
-                          <span>
-                            ₹{(item.lineTotal / item.quantity / 100).toFixed(2)} each
+                        <div className="flex items-center gap-3 text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                          <span>Qty: {item.quantity.toString().padStart(2, '0')}</span>
+                          <span className="size-1 rounded-full bg-neutral-800" />
+                          <span className="tabular-nums">
+                            ₹{(item.lineTotal / item.quantity / 100).toFixed(2)} / unit
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="font-semibold text-lg">
+                      <div className="flex flex-col items-end gap-3 shrink-0">
+                        <span className="font-bold text-lg text-neutral-50 tabular-nums tracking-tighter">
                           ₹{(item.lineTotal / 100).toFixed(2)}
                         </span>
 
                         {editable && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                          <button
                             onClick={() => removeItem(item.id)}
                             disabled={removingItem === item.id}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            className="size-8 rounded-lg bg-neutral-950 border border-neutral-800 text-neutral-600 hover:text-red-500 hover:border-red-500/30 hover:bg-red-500/5 flex items-center justify-center transition-all group/btn"
                           >
                             {removingItem === item.id ? (
-                              <svg
-                                className="animate-spin h-4 w-4"
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                              >
-                                <circle
-                                  className="opacity-25"
-                                  cx="12"
-                                  cy="12"
-                                  r="10"
-                                  stroke="currentColor"
-                                  strokeWidth="4"
-                                />
-                                <path
-                                  className="opacity-75"
-                                  fill="currentColor"
-                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                />
-                              </svg>
+                              <div className="size-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M3 6h18" />
-                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                <line x1="10" x2="10" y1="11" y2="17" />
-                                <line x1="14" x2="14" y1="11" y2="17" />
-                              </svg>
+                              <TrashCan size={16} />
                             )}
-                          </Button>
+                          </button>
                         )}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </AnimatePresence>
             )}
           </div>
         </div>
 
         {/* Footer */}
-        {items.length > 0 && (
-          <div className="border-t px-6 py-4 bg-muted/30 shrink-0">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-muted-foreground">
-                Total Items: {items.length}
-              </span>
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">Grand Total</div>
-                <div className="text-2xl font-bold text-primary">
-                  ₹{(total / 100).toFixed(2)}
-                </div>
-              </div>
+        <div className="p-8 border-t border-neutral-800 bg-[#0a0a0a] shadow-[0_-20px_40px_rgba(0,0,0,0.5)] z-20">
+          <div className="flex items-end justify-between mb-8">
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-neutral-600 uppercase tracking-[0.2em]">Summary Overview</p>
+              <p className="text-[13px] text-neutral-400 font-medium">Items included: {items.length}</p>
             </div>
-            <Button onClick={onClose} className="w-full" size="lg">
-              Close
-            </Button>
+            <div className="text-right space-y-1">
+              <p className="text-[11px] font-bold text-neutral-600 uppercase tracking-[0.2em]">Total Amount</p>
+              <h3 className="text-4xl font-bold tracking-tighter text-neutral-50 tabular-nums">
+                ₹{(total / 100).toFixed(0)}
+              </h3>
+            </div>
           </div>
-        )}
-
-        {items.length === 0 && (
-          <div className="border-t px-6 py-4 shrink-0">
-            <Button onClick={onClose} variant="outline" className="w-full">
-              Close
-            </Button>
-          </div>
-        )}
-
-        <style jsx>{`
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-              transform: translateY(10px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-        `}</style>
+          <Button 
+             onClick={onClose} 
+             className="w-full h-12 rounded-2xl bg-neutral-50 hover:bg-white text-black font-bold text-[12px] uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(255,255,255,0.1)] transition-all active:scale-[0.98]"
+          >
+            Close Summary
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

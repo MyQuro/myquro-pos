@@ -10,13 +10,18 @@ export default async function AdminDetailPage({
 }) {
   await requireAdmin(); // SSR guard
 
-  const { organizationId } = await params; // <-- Add await here
+  const { organizationId } = await params;
   const data = await fetchOrganizationDetails(organizationId);
 
   return (
-    <div className="max-w-3xl mx-auto mt-10 space-y-6">
-      <OrgDetail data={data} />
-      <ReviewActions organizationId={organizationId} />
+    <div className="bg-[#0a0a0a] min-h-screen pb-32">
+       <div className="max-w-5xl mx-auto pt-10">
+          <OrgDetail data={data} />
+          <ReviewActions 
+            organizationId={organizationId} 
+            status={data.organization.status} 
+          />
+       </div>
     </div>
   );
 }
